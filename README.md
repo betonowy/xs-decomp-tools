@@ -39,7 +39,12 @@ xs-volpack ./path/to/dump/directory/ ./path/to/xs_new.vol
 ```
 
 Simply unpacking and packing archive back without changes
-should result in an identical file.
+should result in an identical file. Currently it doesn't,
+and Excessive Speed won't run it for unknown reasons. It
+might have something to do with offsets being specified in
+some other way than by following linked list. Other `.vol`
+files give some kind of a hint towards that - table of
+contents of some sort.
 
 # To use as a library
 
@@ -55,4 +60,6 @@ Expose `xs-tools` namespace with all useful tools as a module. Refactor for that
   but the game doesn't read it. Thus it is saved when
   unpacking the archive and appended verbatim when
   packing it again.
+- Not yet proven to be compatible with Excessive Speed.
+  Might be very old zlib or some obscure data dependency.
 
