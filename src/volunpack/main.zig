@@ -58,6 +58,7 @@ pub fn main() !void {
     const output_dir = args[2];
 
     try std.io.getStdOut().writer().print(
+        \\
         \\Input file: "{s}"
         \\Output dir: "{s}"
         \\
@@ -77,7 +78,6 @@ pub fn main() !void {
 
     while (true) : (file_counter += 1) {
         var vol_header: VolCompressedHeader = undefined;
-
         {
             const read_len = try vol_reader.readAll(std.mem.asBytes(&vol_header));
 
@@ -108,22 +108,18 @@ pub fn main() !void {
                 , .{skip_size + read_len});
 
                 try writeFooterFile(allocator, output_dir, vol_file);
-
                 break;
             }
         }
-
         const percent_progress = 100 * @as(f32, @floatFromInt(counting_reader.bytes_read)) / @as(f32, @floatFromInt(vol_file_stat.size));
 
         var zlib_read_counter = std.io.countingReader(vol_reader);
-
         var zlib_stream = try std.compress.zlib.decompressStream(allocator, zlib_read_counter.reader());
         defer zlib_stream.deinit();
         const zlib_reader = zlib_stream.reader();
 
         const uncompressed_data = try allocator.alloc(u8, vol_header.len_uncompressed);
         defer allocator.free(uncompressed_data);
-
         {
             const read_len = try zlib_reader.readAll(uncompressed_data);
 
@@ -136,7 +132,6 @@ pub fn main() !void {
                 return error.UnexpectedEndOfZlibStream;
             }
         }
-
         try vol_reader.skipBytes(vol_header.len_compressed - zlib_read_counter.bytes_read, .{});
 
         const elapsed_time = @as(f32, @floatFromInt(timer.read())) * (1.0 / @as(comptime_float, std.time.ns_per_s));
@@ -147,7 +142,7 @@ pub fn main() !void {
         try std.fs.cwd().writeFile(out_file_path, uncompressed_data);
 
         try std.io.getStdOut().writer().print(
-            "VOL unpack [{d: >5.1}%] [{d: >5.1} MB/s] file #{d: <5}\r",
+            "VOL unpack [{d: >5.1}%] [{d: >5.1} MiB/s] file #{d: <5}\r",
             .{ percent_progress, decompression_speed, file_counter },
         );
     }
