@@ -46,6 +46,14 @@ some other way than by following linked list. Other `.vol`
 files give some kind of a hint towards that - table of
 contents of some sort.
 
+## xs-sprite
+
+Converts CWE sprites to PNG files (incomplete).
+
+```shell
+xs-sprite ./path/to/vol_xxxx.bin ./path/to/vol_xxxx.png
+```
+
 # To use as a library
 
 ## TODO
