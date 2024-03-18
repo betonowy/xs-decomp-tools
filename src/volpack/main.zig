@@ -16,7 +16,7 @@ const VolCompressedHeader = extern struct {
     }
 
     pub fn verifyMagic(self: *const @This()) bool {
-        return std.mem.eql(u8, &self.magic, "VF") and self.flags == 0x8000; // only compressed flag is currently supported
+        return std.mem.eql(u8, &self.magic, "VF"); // only compressed flag is currently supported
     }
 };
 
@@ -176,32 +176,34 @@ pub fn main() !void {
     const vol_file = try std.fs.cwd().createFile(output_file_path, .{});
     defer vol_file.close();
 
-    var mem_writer = try MemWriter.init(allocator);
-    defer mem_writer.deinit();
+    // var mem_writer = try MemWriter.init(allocator);
+    // defer mem_writer.deinit();
 
     var timer = try std.time.Timer.start();
     var bytes_written_total: usize = 0;
     var compression_speed: f32 = 0;
 
     for (vol_store.constSlice(), 0..) |str, i| {
-        mem_writer.reset();
+        // mem_writer.reset();
 
         const loaded_buffer = try vol_dir.readFileAlloc(allocator, str, std.math.maxInt(usize));
         defer allocator.free(loaded_buffer);
-        {
-            var zlib_stream = try std.compress.zlib.compressStream(allocator, mem_writer.writer, .{ .level = .maximum });
-            defer zlib_stream.deinit();
-            try zlib_stream.writer().writeAll(loaded_buffer);
-            try zlib_stream.finish();
-        }
-        bytes_written_total += mem_writer.constSlice().len;
+        // {
+        //     var zlib_stream = try std.compress.zlib.compressStream(allocator, mem_writer.writer, .{ .level = .maximum });
+        //     defer zlib_stream.deinit();
+        //     try zlib_stream.writer().writeAll(loaded_buffer);
+        //     try zlib_stream.finish();
+        // }
+        // bytes_written_total += mem_writer.constSlice().len;
+        bytes_written_total += loaded_buffer.len;
 
         var header = VolCompressedHeader.init();
         header.len_uncompressed = @intCast(loaded_buffer.len);
-        header.len_compressed = @intCast(mem_writer.constSlice().len);
+        header.len_compressed = @intCast(loaded_buffer.len);
+        header.flags = 0x0000;
 
         try vol_file.writeAll(std.mem.asBytes(&header));
-        try vol_file.writeAll(mem_writer.constSlice());
+        try vol_file.writeAll(loaded_buffer);
 
         const percent_progress = 100 * @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(vol_store.constSlice().len));
         const elapsed_time = @as(f32, @floatFromInt(timer.read())) * (1.0 / @as(comptime_float, std.time.ns_per_s));

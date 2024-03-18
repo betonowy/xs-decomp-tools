@@ -52,7 +52,9 @@ pub fn main() !void {
     const data = try decodePixelData(allocator, info, sprite_data);
     defer allocator.free(data);
 
-    try stb.writeImageToFile(allocator, std.mem.sliceAsBytes(data), .{ info.width, info.height * info.frames }, 4, "test.png");
+    if (std.fs.path.dirname(output_file)) |dir| try std.fs.cwd().makePath(dir);
+
+    try stb.writeImageToFile(allocator, std.mem.sliceAsBytes(data), .{ info.width, info.height * info.frames }, 4, output_file);
 }
 
 const Color = packed struct {
@@ -90,6 +92,7 @@ const Info = struct {
     const Format = enum(u32) {
         a = 0x1000,
         b = 0x7000,
+        c = 0x8003,
     };
 };
 
@@ -122,7 +125,7 @@ pub fn getInfo(data: []const u8) !Info {
     const unk1 = std.mem.bytesToValue(u32, data[27..31]);
     const unk2 = std.mem.bytesToValue(u32, data[31..35]);
     const unk3 = std.mem.bytesToValue(u32, data[35..39]);
-    const format = std.mem.bytesToValue(Info.Format, data[39..43]);
+    const format = if (unk3 == 4) Info.Format.a else std.mem.bytesToValue(Info.Format, data[39..43]);
     const unk5 = if (is_spx) std.mem.bytesToValue(u32, data[43..47]) else 0;
     const unk6 = if (is_spx) std.mem.bytesToValue(u32, data[47..51]) else 0;
 
@@ -139,9 +142,9 @@ pub fn getInfo(data: []const u8) !Info {
     const fi_b = if (is_spx) std.mem.bytesToValue(u16, data[frame_def_start + 18 .. frame_def_start + 20]) else 0;
 
     const frame_data_size: usize = if (is_spx) 20 else 16;
+    // const frame_data_size = 16;
 
     const pallete_start = header_size + len + frame_data_size * frame_count;
-    // const color_stride: usize = if (is_spx) 3 else 4;
 
     for (0..frame_count) |i| {
         const offset = frame_def_start + frame_data_size * i;
@@ -186,7 +189,7 @@ pub fn getInfo(data: []const u8) !Info {
         .len = len,
         .frames = frame_count,
         .width = width,
-        .height = height + 1,
+        .height = height,
         .is_spx = is_spx,
         .pallete = pallete,
         .unk0 = unk0,
@@ -250,62 +253,62 @@ pub fn decodePixelDataSpx(info: Info, data: []const u8, image: []Color) !void {
         size: u16,
     };
 
-    std.debug.print(
-        \\Info:
-        \\
-        \\major {}
-        \\minor {}
-        \\
-        \\key        {x}
-        \\data_start {}
-        \\len        {}
-        \\
-        \\frames {}
-        \\
-        \\cx     {}
-        \\cy     {}
-        \\width  {}
-        \\height {}
-        \\fi_a   {}
-        \\fi_b   {}
-        \\
-        \\is_spx {}
-        \\
-        \\unk0   {x}
-        \\unk1   {x}
-        \\unk2   {x}
-        \\unk3   {x}
-        \\format {}
-        \\unk5   {x}
-        \\unk6   {x}
-        \\
-    , .{
-        info.version_major,
-        info.version_minor,
-        info.key,
-        info.data_start,
-        info.len,
-        info.frames,
-        info.center_x,
-        info.center_y,
-        info.width,
-        info.height,
-        info.fi_a,
-        info.fi_b,
-        info.is_spx,
-        info.unk0,
-        info.unk1,
-        info.unk2,
-        info.unk3,
-        info.format,
-        info.unk5,
-        info.unk6,
-    });
+    // std.debug.print(
+    //     \\Info:
+    //     \\
+    //     \\major {}
+    //     \\minor {}
+    //     \\
+    //     \\key        {x}
+    //     \\data_start {}
+    //     \\len        {}
+    //     \\
+    //     \\frames {}
+    //     \\
+    //     \\cx     {}
+    //     \\cy     {}
+    //     \\width  {}
+    //     \\height {}
+    //     \\fi_a   {}
+    //     \\fi_b   {}
+    //     \\
+    //     \\is_spx {}
+    //     \\
+    //     \\unk0   {x}
+    //     \\unk1   {x}
+    //     \\unk2   {x}
+    //     \\unk3   {x}
+    //     \\format {}
+    //     \\unk5   {x}
+    //     \\unk6   {x}
+    //     \\
+    // , .{
+    //     info.version_major,
+    //     info.version_minor,
+    //     info.key,
+    //     info.data_start,
+    //     info.len,
+    //     info.frames,
+    //     info.center_x,
+    //     info.center_y,
+    //     info.width,
+    //     info.height,
+    //     info.fi_a,
+    //     info.fi_b,
+    //     info.is_spx,
+    //     info.unk0,
+    //     info.unk1,
+    //     info.unk2,
+    //     info.unk3,
+    //     info.format,
+    //     info.unk5,
+    //     info.unk6,
+    // });
 
     var stream = std.io.fixedBufferStream(data);
     const reader = stream.reader();
 
-    while (cf < info.frames) : (cy += 1) {
+    while (cf < info.frames) {
         var current_scanline: Scanline = undefined;
 
         current_scanline.size = try reader.readInt(u16, .little);
@@ -317,6 +320,7 @@ pub fn decodePixelDataSpx(info: Info, data: []const u8, image: []Color) !void {
         }
 
         if (current_scanline.size == Scanline.skip) {
+            cy += 1;
             continue;
         }
 
@@ -325,7 +329,7 @@ pub fn decodePixelDataSpx(info: Info, data: []const u8, image: []Color) !void {
         var index_in_scanline: u32 = 0;
         while (index_in_scanline < current_scanline.sections) : (index_in_scanline += 1) {
             const current_section = try reader.readStruct(Section);
-            if (current_section.jump > info.width) unreachable;
+            if (current_section.jump > info.width) @panic("X coord overshot!");
 
             cx += current_section.jump;
 
@@ -339,6 +343,7 @@ pub fn decodePixelDataSpx(info: Info, data: []const u8, image: []Color) !void {
         }
 
         cx = 0;
+        cy += 1;
     }
 
     if (try stream.getPos() == try stream.getEndPos()) return;

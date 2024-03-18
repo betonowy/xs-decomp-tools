@@ -7,7 +7,7 @@ const VolCompressedHeader = extern struct {
     len_uncompressed: u32,
 
     pub fn verifyMagic(self: *const @This()) bool {
-        return std.mem.eql(u8, &self.magic, "VF") and self.flags == 0x8000; // only compressed flag is currently supported
+        return std.mem.eql(u8, &self.magic, "VF");
     }
 };
 
@@ -98,6 +98,7 @@ pub fn main() !void {
                 const skip_size = 64 - read_len;
 
                 if (vol_file_stat.size - skip_size != counting_reader.bytes_read) {
+                    std.debug.print("{} bytes unread!\n", .{vol_file_stat.size - counting_reader.bytes_read - read_len});
                     return error.InvalidHeaderMagic;
                 }
 
@@ -111,39 +112,65 @@ pub fn main() !void {
                 break;
             }
         }
+
         const percent_progress = 100 * @as(f32, @floatFromInt(counting_reader.bytes_read)) / @as(f32, @floatFromInt(vol_file_stat.size));
 
-        var zlib_read_counter = std.io.countingReader(vol_reader);
-        var zlib_stream = try std.compress.zlib.decompressStream(allocator, zlib_read_counter.reader());
-        defer zlib_stream.deinit();
-        const zlib_reader = zlib_stream.reader();
+        switch (vol_header.flags) {
+            else => @panic("Unsupported flags"),
+            0x0000 => {
+                const uncompressed_data = try allocator.alloc(u8, vol_header.len_uncompressed);
+                defer allocator.free(uncompressed_data);
 
-        const uncompressed_data = try allocator.alloc(u8, vol_header.len_uncompressed);
-        defer allocator.free(uncompressed_data);
-        {
-            const read_len = try zlib_reader.readAll(uncompressed_data);
+                if (try vol_reader.read(uncompressed_data) != vol_header.len_uncompressed) {
+                    return error.NotEnoughBytesRead;
+                }
 
-            if (read_len != uncompressed_data.len) {
-                try std.io.getStdErr().writer().print(
-                    \\
-                    \\Expected {} bytes on output, decompressed {} bytes
-                    \\
-                , .{ uncompressed_data.len, read_len });
-                return error.UnexpectedEndOfZlibStream;
-            }
+                const elapsed_time = @as(f32, @floatFromInt(timer.read())) * (1.0 / @as(comptime_float, std.time.ns_per_s));
+                const decompression_speed = (@as(f32, @floatFromInt(counting_reader.bytes_read)) / (1024 * 1024)) / elapsed_time;
+
+                const out_file_path = try makeFileName(allocator, output_dir, file_counter);
+                defer allocator.free(out_file_path);
+                try std.fs.cwd().writeFile(out_file_path, uncompressed_data);
+
+                try std.io.getStdOut().writer().print(
+                    "VOL unpack [{d: >5.1}%] [{d: >5.1} MiB/s] file #{d: <5}\r",
+                    .{ percent_progress, decompression_speed, file_counter },
+                );
+            },
+            0x8000 => {
+                var zlib_read_counter = std.io.countingReader(vol_reader);
+                var zlib_stream = try std.compress.zlib.decompressStream(allocator, zlib_read_counter.reader());
+                defer zlib_stream.deinit();
+                const zlib_reader = zlib_stream.reader();
+
+                const uncompressed_data = try allocator.alloc(u8, vol_header.len_uncompressed);
+                defer allocator.free(uncompressed_data);
+                {
+                    const read_len = try zlib_reader.readAll(uncompressed_data);
+
+                    if (read_len != uncompressed_data.len) {
+                        try std.io.getStdErr().writer().print(
+                            \\
+                            \\Expected {} bytes on output, decompressed {} bytes
+                            \\
+                        , .{ uncompressed_data.len, read_len });
+                        return error.UnexpectedEndOfZlibStream;
+                    }
+                }
+                try vol_reader.skipBytes(vol_header.len_compressed - zlib_read_counter.bytes_read, .{});
+
+                const elapsed_time = @as(f32, @floatFromInt(timer.read())) * (1.0 / @as(comptime_float, std.time.ns_per_s));
+                const decompression_speed = (@as(f32, @floatFromInt(counting_reader.bytes_read)) / (1024 * 1024)) / elapsed_time;
+
+                const out_file_path = try makeFileName(allocator, output_dir, file_counter);
+                defer allocator.free(out_file_path);
+                try std.fs.cwd().writeFile(out_file_path, uncompressed_data);
+
+                try std.io.getStdOut().writer().print(
+                    "VOL unpack [{d: >5.1}%] [{d: >5.1} MiB/s] file #{d: <5}\r",
+                    .{ percent_progress, decompression_speed, file_counter },
+                );
+            },
         }
-        try vol_reader.skipBytes(vol_header.len_compressed - zlib_read_counter.bytes_read, .{});
-
-        const elapsed_time = @as(f32, @floatFromInt(timer.read())) * (1.0 / @as(comptime_float, std.time.ns_per_s));
-        const decompression_speed = (@as(f32, @floatFromInt(counting_reader.bytes_read)) / (1024 * 1024)) / elapsed_time;
-
-        const out_file_path = try makeFileName(allocator, output_dir, file_counter);
-        defer allocator.free(out_file_path);
-        try std.fs.cwd().writeFile(out_file_path, uncompressed_data);
-
-        try std.io.getStdOut().writer().print(
-            "VOL unpack [{d: >5.1}%] [{d: >5.1} MiB/s] file #{d: <5}\r",
-            .{ percent_progress, decompression_speed, file_counter },
-        );
     }
 }
