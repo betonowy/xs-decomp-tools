@@ -9,64 +9,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    stb.addIncludePath(.{ .path = "thirdparty" });
 
-    const stb_lib = b.addStaticLibrary(.{
-        .name = "stb",
-        .root_source_file = .{ .path = "thirdparty/stb.zig" },
+    const utils = b.addModule("utils", .{
+        .root_source_file = .{ .path = "utils/root.zig" },
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(stb_lib);
-    stb_lib.addIncludePath(.{ .path = "thirdparty" });
-    stb.addIncludePath(.{ .path = "thirdparty" });
-    // stb.linkLibC();
 
-    {
-        const xs_volunpack = b.addExecutable(.{
-            .name = "xs-volunpack",
-            .root_source_file = .{ .path = "src/volunpack/main.zig" },
-            .target = target,
-            .optimize = optimize,
-        });
+    const vol = b.addModule("vol", .{
+        .root_source_file = .{ .path = "vol/root.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+    vol.addImport("utils", utils);
 
-        b.installArtifact(xs_volunpack);
-        const run_cmd = b.addRunArtifact(xs_volunpack);
-        run_cmd.step.dependOn(b.getInstallStep());
-
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-
-        const run_step = b.step("run-volunpack", "Run xs-volunpack");
-        run_step.dependOn(&run_cmd.step);
-    }
-    {
-        const xs_volpack = b.addExecutable(.{
-            .name = "xs-volpack",
-            .root_source_file = .{ .path = "src/volpack/main.zig" },
-            .target = target,
-            .optimize = optimize,
-        });
-
-        b.installArtifact(xs_volpack);
-        const run_cmd = b.addRunArtifact(xs_volpack);
-        run_cmd.step.dependOn(b.getInstallStep());
-
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-
-        const run_step = b.step("run-volpack", "Run xs-volpack");
-        run_step.dependOn(&run_cmd.step);
-    }
     {
         const xs_sprite = b.addExecutable(.{
             .name = "xs-sprite",
-            .root_source_file = .{ .path = "src/sprite/main.zig" },
+            .root_source_file = .{ .path = "app/sprite.zig" },
             .target = target,
             .optimize = optimize,
         });
-        // xs_sprite.linkLibrary(stb);
         xs_sprite.linkLibC();
         xs_sprite.root_module.addImport("stb", stb);
 
@@ -74,11 +38,27 @@ pub fn build(b: *std.Build) void {
         const run_cmd = b.addRunArtifact(xs_sprite);
         run_cmd.step.dependOn(b.getInstallStep());
 
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
+        if (b.args) |args| run_cmd.addArgs(args);
 
         const run_step = b.step("run-sprite", "Run xs-sprite");
+        run_step.dependOn(&run_cmd.step);
+    }
+    {
+        const xs_vol = b.addExecutable(.{
+            .name = "xs-vol",
+            .root_source_file = .{ .path = "app/vol.zig" },
+            .target = target,
+            .optimize = optimize,
+        });
+        xs_vol.root_module.addImport("vol", vol);
+
+        b.installArtifact(xs_vol);
+        const run_cmd = b.addRunArtifact(xs_vol);
+        run_cmd.step.dependOn(b.getInstallStep());
+
+        if (b.args) |args| run_cmd.addArgs(args);
+
+        const run_step = b.step("run-vol", "Run xs-vol");
         run_step.dependOn(&run_cmd.step);
     }
 }
