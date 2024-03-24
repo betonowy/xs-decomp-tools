@@ -179,7 +179,7 @@ pub fn tocAndChunks(allocator: std.mem.Allocator, vol_file: std.fs.File) !bool {
             break;
         }
 
-        // try std.io.getStdOut().writer().print("TOC entry #{}\n", .{entries_count});
+        try std.io.getStdOut().writer().print("TOC entry #{}\n", .{entries_count});
 
         const toc_entry = try toc_fbs.reader().readStructEndian(types.TocEntry, .little);
 
@@ -246,29 +246,29 @@ pub fn tocAndChunks(allocator: std.mem.Allocator, vol_file: std.fs.File) !bool {
             return false;
         }
 
-        // try std.io.getStdOut().writer().print(
-        //     \\    Label:        {s}
-        //     \\    Path:         {s}
-        //     \\    Offset:       {}
-        //     \\    Length:       {}
-        //     \\    Chunk Length: {}
-        //     \\    FILETIME:     {}
-        //     \\
-        // , .{
-        //     @as([*:0]const u8, @ptrCast(string_table.ptr + toc_entry.string_offset_to_label)),
-        //     @as([*:0]const u8, @ptrCast(string_table.ptr + toc_entry.string_offset_to_path)),
-        //     toc_entry.chunk_offset,
-        //     toc_entry.file_length,
-        //     file_chunk_header.chunkLength(),
-        //     std.os.windows.fileTimeToNanoSeconds(toc_entry.filetime),
-        // });
+        try std.io.getStdOut().writer().print(
+            \\    Label:        {s}
+            \\    Path:         {s}
+            \\    Offset:       {}
+            \\    Length:       {}
+            \\    Chunk Length: {}
+            \\    FILETIME:     {}
+            \\
+        , .{
+            @as([*:0]const u8, @ptrCast(string_table.ptr + toc_entry.string_offset_to_label)),
+            @as([*:0]const u8, @ptrCast(string_table.ptr + toc_entry.string_offset_to_path)),
+            toc_entry.chunk_offset,
+            toc_entry.file_length,
+            file_chunk_header.chunkLength(),
+            std.os.windows.fileTimeToNanoSeconds(toc_entry.filetime),
+        });
 
         switch (toc_chunk_header.type) {
             .raw => {
-                // try std.io.getStdOut().writeAll("Chunk is not compressed\n");
+                try std.io.getStdOut().writeAll("Chunk is not compressed\n");
             },
             .compressed => {
-                // try std.io.getStdOut().writeAll("Chunk is compressed\n");
+                try std.io.getStdOut().writeAll("Chunk is compressed\n");
 
                 const buffer = try allocator.alloc(u8, file_chunk_header.uncompressedLength());
                 defer allocator.free(buffer);

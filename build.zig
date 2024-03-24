@@ -11,18 +11,11 @@ pub fn build(b: *std.Build) void {
     });
     stb.addIncludePath(.{ .path = "thirdparty" });
 
-    const utils = b.addModule("utils", .{
-        .root_source_file = .{ .path = "utils/root.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
     const vol = b.addModule("vol", .{
         .root_source_file = .{ .path = "vol/root.zig" },
         .target = target,
         .optimize = optimize,
     });
-    vol.addImport("utils", utils);
 
     {
         const xs_sprite = b.addExecutable(.{
