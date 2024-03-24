@@ -1,5 +1,4 @@
 const std = @import("std");
-const utils = @import("utils");
 
 pub const types = @import("types.zig");
 pub const validation = @import("validation.zig");
@@ -32,7 +31,10 @@ pub fn unpack(allocator: std.mem.Allocator, src_file_path: []const u8, dst_dir_p
     var dump_info_arr = std.ArrayList(ops.ChunkInfo).init(allocator);
     defer dump_info_arr.deinit();
 
-    for (toc_entries) |entry| try dump_info_arr.append(try ops.dumpChunk(vol_file, toc_buffer, entry, dst_dir));
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    for (toc_entries) |entry| try dump_info_arr.append(try ops.dumpChunk(arena.allocator(), vol_file, toc_buffer, entry, dst_dir));
 
     const root_json = try dst_dir.createFile(root_json_filename, .{});
     defer root_json.close();

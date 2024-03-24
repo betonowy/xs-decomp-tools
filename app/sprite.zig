@@ -15,12 +15,38 @@ const VolCompressedHeader = extern struct {
 fn printUsage() !void {
     try std.io.getStdErr().writeAll(
         \\
-        \\Usage: xs-sprite SPRITE_FILE OUTPUT_IMAGE
+        \\Usage: xs-sprite SPRITE OUTPUT_IMAGE
+        \\       xs-sprite -r SPRITES_DIR OUTPUT_IMAGES_DIR
         \\
         \\Converts proprietary sprite into a png file + json metadata.
+        \\Use -r option to recursively convert directories with sprites.
         \\
         \\
     );
+}
+
+const Mode = union(enum) {
+    single: struct {
+        src_file: []const u8,
+        dst_file: []const u8,
+    },
+    recursive: struct {
+        src_dir: []const u8,
+        dst_dir: []const u8,
+    },
+};
+
+pub fn parseMode(args: []const []const u8) ?Mode {
+    if (args.len < 3) return null;
+
+    if (std.mem.eql(u8, args[1], "-r")) {
+        if (args.len == 4) return .{ .recursive = .{ .src_dir = args[2], .dst_dir = args[3] } };
+        return null;
+    }
+
+    if (args.len == 3) return .{ .single = .{ .src_file = args[1], .dst_file = args[2] } };
+
+    return null;
 }
 
 pub fn main() !void {
@@ -31,30 +57,70 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len != 3) return try printUsage();
+    const mode = parseMode(args) orelse return try printUsage();
 
-    const input_file = args[1];
-    const output_file = args[2];
+    switch (mode) {
+        .single => |p| {
+            const src_file = try std.fs.cwd().openFile(p.src_file, .{});
+            defer src_file.close();
+            if (std.fs.path.dirname(p.dst_file)) |path| try std.fs.cwd().makePath(path);
+            const dst_file = try std.fs.cwd().createFile(p.dst_file, .{});
+            defer dst_file.close();
+            try convertSingleImage(allocator, src_file, dst_file);
+        },
+        .recursive => |p| {
+            var src_dir = try std.fs.cwd().openDir(p.src_dir, .{ .iterate = true });
+            defer src_dir.close();
+            try std.fs.cwd().makePath(p.dst_dir);
+            var dst_dir = try std.fs.cwd().openDir(p.dst_dir, .{});
+            defer dst_dir.close();
+            try convertRecursive(allocator, src_dir, dst_dir);
+        },
+    }
+}
 
-    try std.io.getStdOut().writer().print(
-        \\
-        \\Input file : "{s}"
-        \\Output file: "{s}"
-        \\
-    , .{ input_file, output_file });
+pub fn convertRecursive(allocator: std.mem.Allocator, src_dir: std.fs.Dir, dst_dir: std.fs.Dir) !void {
+    var walker = try src_dir.walk(allocator);
+    defer walker.deinit();
 
-    const sprite_data = try std.fs.cwd().readFileAlloc(allocator, input_file, std.math.maxInt(usize));
+    while (try walker.next()) |entry| {
+        if (entry.kind != .file) continue;
+
+        const basename = try allocator.dupe(u8, entry.basename);
+        defer allocator.free(basename);
+        for (basename) |*c| c.* = std.ascii.toLower(c.*);
+        const extension = std.fs.path.extension(basename);
+
+        if (!std.mem.eql(u8, extension, ".spx") and !std.mem.eql(u8, extension, ".spc")) continue;
+
+        const dst_path = try std.mem.concat(allocator, u8, &.{ entry.path, ".png" });
+        defer allocator.free(dst_path);
+
+        if (std.fs.path.dirname(dst_path)) |path| try dst_dir.makePath(path);
+
+        const dst_file = try dst_dir.createFile(dst_path, .{});
+        defer dst_file.close();
+
+        const src_file = try src_dir.openFile(entry.path, .{});
+        defer src_file.close();
+
+        try std.io.getStdOut().writer().print("Converting: {s}\n", .{entry.path});
+
+        try convertSingleImage(allocator, src_file, dst_file);
+    }
+}
+
+pub fn convertSingleImage(allocator: std.mem.Allocator, src_file: std.fs.File, dst_file: std.fs.File) !void {
+    const sprite_data = try src_file.readToEndAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(sprite_data);
 
-    if (!isCweSprite(sprite_data)) return try std.io.getStdErr().writer().print("This is not a CWE sprite. Bye!\n", .{});
+    if (!isCweSprite(sprite_data)) return error.NotCweSprite;
 
     const info = try getInfo(sprite_data);
     const data = try decodePixelData(allocator, info, sprite_data);
     defer allocator.free(data);
 
-    if (std.fs.path.dirname(output_file)) |dir| try std.fs.cwd().makePath(dir);
-
-    try stb.writeImageToFile(allocator, std.mem.sliceAsBytes(data), .{ info.width, info.height * info.frames }, 4, output_file);
+    try stb.writeImageToFile(std.mem.sliceAsBytes(data), .{ info.width, info.height * info.frames }, 4, dst_file);
 }
 
 const Color = packed struct {
@@ -148,13 +214,7 @@ pub fn getInfo(data: []const u8) !Info {
 
     for (0..frame_count) |i| {
         const offset = frame_def_start + frame_data_size * i;
-
-        const w = std.mem.bytesToValue(u16, data[offset + 12 .. offset + 14]);
-        const h = std.mem.bytesToValue(u16, data[offset + 14 .. offset + 16]);
-        const a = std.mem.bytesToValue(u16, data[offset + 16 .. offset + 18]);
-        const b = std.mem.bytesToValue(u16, data[offset + 18 .. offset + 20]);
-
-        std.debug.print("w: {}, h: {}, a: {}, b: {}\n", .{ w, h, a, b });
+        _ = offset; // autofix
     }
 
     var pallete: [256]Color = undefined;

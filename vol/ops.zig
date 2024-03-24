@@ -56,7 +56,7 @@ pub fn pathNoRoot(path: []const u8) []const u8 {
     return path[index + 2 ..];
 }
 
-pub fn loadChunk(allocator: std.mem.Allocator, vol_file: std.fs.File, offset: usize) ![]const u8 {
+pub fn loadChunk(allocator: std.mem.Allocator, vol_file: std.fs.File, offset: usize) ![]u8 {
     try vol_file.seekTo(offset);
 
     const chunk_header = try vol_file.reader().readStructEndian(types.ChunkHeader, .little);
@@ -85,19 +85,26 @@ pub const ChunkInfo = struct {
     additional_data: ?[]const u8,
 };
 
-pub fn dumpChunk(vol_file: std.fs.File, toc_buffer: []const u8, toc_entry: types.TocEntry, dump_dir: std.fs.Dir) !ChunkInfo {
+pub fn dumpChunk(allocator: std.mem.Allocator, vol_file: std.fs.File, toc_buffer: []u8, toc_entry: types.TocEntry, dump_dir: std.fs.Dir) !ChunkInfo {
     try vol_file.seekTo(toc_entry.chunk_offset);
 
     const chunk_header = try vol_file.reader().readStructEndian(types.ChunkHeader, .little);
     if (!chunk_header.magicVerify()) return error.BadChunkMagic;
 
     const path = pathNoRoot(try getTocPath(toc_buffer, toc_entry));
+    const path_new = try allocator.dupe(u8, path);
+
+    if (comptime builtin.os.tag != .windows) {
+        for (path_new) |*c| {
+            if (c.* == '\\') c.* = '/';
+        }
+    }
 
     switch (chunk_header.type) {
         .raw => {
-            if (std.fs.path.dirname(path)) |dir_path| try dump_dir.makePath(dir_path);
+            if (std.fs.path.dirname(path_new)) |dir_path| try dump_dir.makePath(dir_path);
 
-            const out_file = try dump_dir.createFile(path, .{});
+            const out_file = try dump_dir.createFile(path_new, .{});
             defer out_file.close();
 
             try out_file.writeFileAll(vol_file, .{
@@ -106,9 +113,9 @@ pub fn dumpChunk(vol_file: std.fs.File, toc_buffer: []const u8, toc_entry: types
             });
         },
         .compressed => {
-            if (std.fs.path.dirname(path)) |dir_path| try dump_dir.makePath(dir_path);
+            if (std.fs.path.dirname(path_new)) |dir_path| try dump_dir.makePath(dir_path);
 
-            const out_file = try dump_dir.createFile(path, .{});
+            const out_file = try dump_dir.createFile(path_new, .{});
             defer out_file.close();
 
             var br = std.io.bufferedReader(vol_file.reader());
@@ -120,7 +127,7 @@ pub fn dumpChunk(vol_file: std.fs.File, toc_buffer: []const u8, toc_entry: types
     }
 
     return .{
-        .path = path,
+        .path = path_new,
         .label = try getTocLabel(toc_buffer, toc_entry),
         .additional_data_type = toc_entry.additional_data_flag,
         .additional_data = try getTocExtraDataBuf(toc_buffer, toc_entry),
