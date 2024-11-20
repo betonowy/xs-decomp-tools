@@ -5,14 +5,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const stb = b.addModule("stb", .{
-        .root_source_file = .{ .path = "thirdparty/stb.zig" },
+        .root_source_file = b.path("thirdparty/stb.zig"),
         .target = target,
         .optimize = optimize,
     });
-    stb.addIncludePath(.{ .path = "thirdparty" });
+    stb.addIncludePath(b.path("thirdparty"));
 
     const vol = b.addModule("vol", .{
-        .root_source_file = .{ .path = "vol/root.zig" },
+        .root_source_file = b.path("vol/root.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
     {
         const xs_sprite = b.addExecutable(.{
             .name = "xs-sprite",
-            .root_source_file = .{ .path = "app/sprite.zig" },
+            .root_source_file = b.path("app/sprite.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -39,7 +39,7 @@ pub fn build(b: *std.Build) void {
     {
         const xs_vol = b.addExecutable(.{
             .name = "xs-vol",
-            .root_source_file = .{ .path = "app/vol.zig" },
+            .root_source_file = b.path("app/vol.zig"),
             .target = target,
             .optimize = optimize,
         });
