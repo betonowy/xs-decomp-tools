@@ -1,8 +1,4 @@
-const c = @cImport({
-    @cDefine("STB_IMAGE_WRITE_IMPLEMENTATION", {});
-    @cDefine("STB_IMAGE_WRITE_STATIC", {});
-    @cInclude("stb/stb_image_write.h");
-});
+const c = @cImport(@cInclude("stb/stb_image_write.h"));
 
 const std = @import("std");
 

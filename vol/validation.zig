@@ -22,7 +22,7 @@ pub fn footer(vol_file: std.fs.File) !bool {
 
         switch (chunk_header.magicVerify() and bytes_left != @sizeOf(types.Footer)) {
             true => {
-                last_chunk_offset = try vol_file.getPos() - @sizeOf(types.ChunkHeader);
+                last_chunk_offset = @as(usize, @intCast(try vol_file.getPos())) - @sizeOf(types.ChunkHeader);
                 last_chunk_size = chunk_header.chunkLength();
 
                 try vol_file.reader().skipBytes(chunk_header.chunkLength(), .{});
@@ -88,7 +88,7 @@ pub fn tocAndChunks(allocator: std.mem.Allocator, vol_file: std.fs.File) !bool {
 
         switch (chunk_header.magicVerify() and bytes_left != @sizeOf(types.Footer)) {
             true => {
-                last_chunk_offset = try vol_file.getPos() - @sizeOf(types.ChunkHeader);
+                last_chunk_offset = @as(usize, @intCast(try vol_file.getPos())) - @sizeOf(types.ChunkHeader);
                 last_chunk_size = chunk_header.chunkLength();
 
                 try vol_file.reader().skipBytes(chunk_header.chunkLength(), .{});
